@@ -1,0 +1,137 @@
+
+setwd("/Users/manhhuyen/Documents/SA20 Unifr/Econometrics and Applications 1/PC labs/PC lab 4") 
+library(readstata13)
+data=read.dta13("pc_4.dta",nonint.factors = TRUE,generate.factors=T)
+
+rm(list=ls())
+
+# Load add-on packages
+library(foreign)
+library(lmtest)
+library(sandwich) 
+#library(plyr) 
+library(plm) #Panel Data Econometrics
+library(clubSandwich) #clustering
+
+
+# Load data set
+attach(data) #store variables in own objects
+
+sum(is.na(data))
+
+
+# Descriptive analysis
+
+#3) Mean outcome, starting wage, hours open per day, prices for a full mealb by state and years separately 
+round(aggregate(cbind(fte,wage_st,hrsopen,price),list(year=year,state=state),mean),2)
+
+#4) Investigate the regional dummy variables
+round(rbind(mean(pa1[state==0]),mean(pa2[state==0])),2)
+sum(rbind(mean(pa1[state==0]),mean(pa2[state==0])))
+
+
+round(rbind(mean(southj),mean(centralj),mean(northj)),2)
+sum(rbind(mean(southj[state==1]),mean(centralj[state==1]),mean(northj[state==1])))
+
+
+
+# Estimation
+
+#5) 
+ols1=lm(fte[state==1]~minw[state==1])
+coeftest(ols1, vcov=vcovHC)
+
+
+0.56122*0.8
+
+#6) Difference in minimum wage between NJ and PA in 1993
+ols2=lm(fte[year==93]~minw[year==93])
+coeftest(ols2, vcov=vcovHC)
+
+-1.1431*0.8
+
+#7) Main assumptions DiD
+#8) A DiD model without covariates 
+
+#9) DiD estimation
+#class(state)
+#class(year)
+
+
+did1=lm(fte~factor(state)+factor(year)+factor(state)*factor(year))
+#Homoskedastic error
+summary(did1)
+
+# using heteroscedasticity robust standard errors
+coeftest(did1, vcov=vcovHC)
+# SE clustered at a store level:
+coef_test(obj =did1, vcov = "CR2",  cluster = storeid)
+
+#10) Add chain type, the regional dummies, or the ownership status
+did2=lm(fte~factor(state)*factor(year)+factor(chain)+co_owned+southj+centralj+pa1)
+coeftest(did2, vcov=vcovHC)
+coef_test(obj =did2, vcov = "CR2",  cluster = storeid)
+
+#11) Use the fixed effects (FE) method
+fe1=plm(fte~factor(state)*factor(year),index=c("storeid","year"),data=data, model=c("within"))
+
+coef_test(obj =fe1, vcov = "CR2",  cluster = storeid)
+
+# main underlying assumption of the FE method
+
+#12) Add exogenous covariates
+did3=lm(fte~factor(state)+factor(year)+factor(state)*factor(year)+wage_st+hrsopen+price)
+coeftest(did3, vcov=vcovHC)
+coef_test(obj =did3, vcov = "CR2",  cluster = storeid)
+
+fe2=plm(fte~factor(state)*factor(year)+wage_st+hrsopen+price,index=c("storeid","year"),data=data, model=c("within"))
+coef_test(obj =fe2, vcov = "CR2",  cluster = storeid)
+
+#13) Random effects (RE)
+re=plm(fte~factor(state)*factor(year)+wage_st+hrsopen+price,index=c("storeid","year"),data=data, model=c("random"))
+coef_test(obj =re, vcov = "CR2",  cluster = storeid)
+
+#14) Hausman test
+phtest(fe2, re, vcov=vcovHC)
+
+
+
+# New data
+
+
+#load data set
+load("/Users/manhhuyen/Documents/SA20 Unifr/Econometrics and Applications 1/PC labs/PC lab 4/infantmortality.RData")
+
+#store variables in own objects
+attach(data)
+
+
+#15
+summary(data)
+
+#16
+
+# fixed effects regression of infant mortality on per capita income and number of doctors/100,000 
+fe1<-plm(infmort~pcinc+physic+year, index=c("state","year"),data=data, model=c("within"))
+coef_test(obj =fe1, vcov = "CR2",  cluster = state)
+
+-0.00032*2500
+
+
+#17
+#alternative approach whose coefficients are numerically equivalent to fixed effects estimation:
+# include a dummy for each state in ols regression
+ols2=lm(infmort~pcinc+physic+factor(state)+year)
+coef_test(obj =ols2, vcov = "CR2",  cluster = state)
+
+
+
+
+#18
+# first differences-based regression is equivalent because panel has only two periods
+fd1<-plm(infmort~pcinc+physic, index=c("state","year"),data=data, model=c("fd"))
+coef_test(obj =fd1, vcov = "CR2",  cluster = state)
+
+#With year
+fe1b<-plm(infmort~pcinc+physic+ year, index=c("state","year"),data=data, model=c("within"))
+coef_test(obj =fe1b, vcov = "CR2",  cluster = state)
