@@ -1,0 +1,216 @@
+#=============================================================
+# PC1 Non-linear regression models
+#=============================================================
+
+# Set working directory
+install.packages("readstata13")
+library(readstata13)
+setwd("/Users/manhhuyen/Documents/SA20 Unifr/Econometrics and Applications 1/PC labs")
+data=read.dta("pc_1.dta",nonint.factors = TRUE,generate.factors=T)
+attach(data)
+name(data)
+summary(lfp)
+library(mosaic)
+table(child) #frequency distribution
+dchild=density(child) 
+plot(dchild, main = "Distribution of no. of children", xlab = "no. of children", ylab = "frequency")
+
+#another way to load the dataset 
+# Load data set
+#data_pc1=read.dta("pc_1.dta")
+
+#store variables in own objects
+#attach(data_pc1)
+
+
+# Load add-on packages (Don�t forget to install them before!)
+library(foreign) # Read Data Stored by other programs
+library(sandwich) #model-robust covariance matrix estimators
+library(lmtest)
+library(mfx) # Marginal Effects, Odds Ratios and Incidence Rate Ratios for GLMs
+library(histogram)
+library(descr) #litting, applying and combining data
+library(censReg) # for Tobit
+library(plyr) #to call ddply function. "Tools for splitting, applying and combining data"
+library(memisc) #build a table comparing several models
+
+
+
+#================================================================================
+# 2.Descriptive analysis
+#================================================================================
+
+#Descriptive information on the outcome (lfp) and the treatment variable (child)
+#a) What is the percentage of women employed? 
+mean(lfp)
+summary(lfp)
+hist_lfp=hist(lfp,col="grey",main="Labor force participation")
+
+#b) Show the distribution of children in the sample
+summary(child)
+#First possibility: histogram
+hist_child=hist(child,col="dimgray",main="Number of children")
+#Second possibility: table
+table(child)
+
+#c) How does lfp vary with the number of children? => Many ways to implement this
+
+#First possibility: aggregate
+#Split data into subsets and compute the mean
+aggregate(lfp,list(child=child),mean)
+plot(aggregate(lfp,list(child=child),mean))
+
+#Second possibility: tapply
+tapply(lfp,list(child=child),mean)
+
+#Third possibility: ddply
+ddply(data_pc1,"child",summarize,mean=mean(lfp),sd=sd(lfp),obs=length(lfp))
+plot(ddply(data_pc1,"child",summarize,mean_lfp=mean(lfp)))
+
+###Additional:
+# What if we exclude those below 25 and above 66 years old
+ddply(data_pc1,"child",summarize,mean=mean(lfp[age<66&age>25]),sd=sd(lfp[age<66&age>25]),obs=length(lfp[age<66&age>25]))
+
+
+#3) 
+
+#a) Distribution of age 
+summary(age)
+hist_age=hist(age,col="darkturquoise",main="Age")
+
+#b) Show also how the average age varies with lfp... 
+#using aggregate
+aggregate(age,list(lfp=lfp),mean)
+plot(aggregate(age,list(lfp=lfp),mean))
+
+#using ddply
+ddply(data_pc1,"lfp",summarize,mean=mean(age),sd=sd(age),obs=length(age)) 
+plot(ddply(data_pc1,"lfp",summarize,mean=mean(age)))
+
+#Mean:
+mean(age[lfp==1])
+mean(age[lfp==0])
+
+#c) ...and with the number of children.
+#using aggregate
+aggregate(age,list(child=child),mean)
+plot(aggregate(age,list(child=child),mean))
+
+#Mean:
+mean(age[child==0])
+mean(age[child==1])
+mean(age[child==2])
+mean(age[child==3])
+mean(age[child==4])
+
+
+#using ddply
+ddply(data_pc1,"child",summarize,mean=mean(age),sd=sd(age),obs=length(age))
+plot(ddply(data_pc1,"child",summarize,mean=mean(age)))
+
+#4) Consider hours worked. Obtain its distribution and show
+summary(hours)
+hist_hours=hist(hours,col="khaki1",main="Hours worked")
+
+
+# How average hours worked differ by the number of children
+ddply(data_pc1,"child",summarize,mean=mean(hours),sd=sd(hours),obs=length(hours))
+plot(ddply(data_pc1,"child",summarize,mean=mean(hours)))
+
+#Additional:
+# Hours worked by the number of children Only for those in labor force:
+ddply(data_pc1,"child",summarize,mean=mean(hours[lfp==1]),sd=sd(hours[lfp==1]),obs=length(hours[lfp==1]))
+
+
+#================================================================================
+# Estimation: LPM, Probit, Tobit 
+#================================================================================
+
+#*****************************LPM************************************************
+#Estimate the prob. of lfp using a linear probability model (LPM)
+#Pre-step 1: Create the dummy married
+married=1*(civil==2)
+
+age2=(age^2)
+
+
+#Pre-step 2: For all estimations we will use the same model. Let's define it:
+model_pc1=lfp ~ child+ych0_2 +ych3_4+  ych5_10 + ych11_16 +age + I(age^2)+ educ_l+ educ_h+married+ nwinc
+
+#5) A linear probability model (LPM)
+lpm=lm(model_pc1)
+coeftest(lpm, vcov=vcovHC)
+
+##Additional: 
+#There is a way to build a table comparing several models
+library(memisc)
+mtable(lpm)
+
+#6) Av.effect on the work prob. if 2 children (youngest child between 0 and 2) compared to if 1 child 
+mean1<-mean(cbind(1,1,1,ych3_4,ych5_10,ych11_16,age,I(age^2),educ_l,educ_h,married,nwinc)%*%lpm$coef)
+mean2<-mean(cbind(1,2,1,ych3_4,ych5_10,ych11_16,age,I(age^2),educ_l,educ_h,married,nwinc)%*%lpm$coef)
+mean3<-mean(cbind(1,3,1,ych3_4,ych5_10,ych11_16,age,I(age^2),educ_l,educ_h,married,nwinc)%*%lpm$coef)
+mean2-mean1
+mean3-mean2
+
+
+
+
+#7) Compute the predicted probabilities of working. Are there any problems?
+fv_lpm=fitted(lpm)
+summary(fv_lpm)
+hist_fv_lpm =hist(fv_lpm,col="lightblue",main="Fitted values LPM")
+
+
+#**************************Probit**********************************************
+#8) Estimate a probit model
+probit=glm(model_pc1, family=binomial(probit))
+summary(probit)
+
+#9) Calculate the average c.p. change in probability of working (ATE) for the same two comparison groups as in 3b. 
+m1<-mean(pnorm(cbind(1,1,1,ych3_4,ych5_10,ych11_16,age,I(age^2),educ_l,educ_h,married,nwinc)%*%probit$coef))
+m2<-mean(pnorm(cbind(1,2,1,ych3_4,ych5_10,ych11_16,age,I(age^2),educ_l,educ_h,married,nwinc)%*%probit$coef))
+m3<-mean(pnorm(cbind(1,3,1,ych3_4,ych5_10,ych11_16,age,I(age^2),educ_l,educ_h,married,nwinc)%*%probit$coef))
+m2-m1
+m3-m2
+
+#10) MFE for the probit model
+# marginal effects at means of other regressors
+probitmfx(probit, data=data_pc1, atmean=TRUE)
+# average marginal ("treatment") effects
+probitmfx(probit, data=data_pc1, atmean=FALSE)
+
+
+#*************************Tobit application*************************************************
+#11)Consider the number of hours worked per week and its dependence on the given personal characteristics
+model_pc1_hours=hours~ child+ych0_2 +ych3_4+  ych5_10 + ych11_16 +age + I(age^2)+ educ_l+ educ_h+married+ nwinc
+ols_hours=lm(model_pc1_hours)
+coeftest(ols_hours, vcov=vcovHC)
+
+# Explain why it may be problematic to include wage in the regression.
+
+# Obtain the OLS fitted values
+hist_hours_ols=hist(ols_hours$fitted,col="lightcoral",main="Hours worked.Fitted values OLS") #negative values found for hours worked
+
+summary(ols_hours$fitted)
+#12) Explain why hours worked is a reasonable candidate for a Tobit model.
+
+
+#13) Estimate a Tobit model for hours 
+#i) Estimate a Tobit model for hours 
+tobit_hours=censReg(model_pc1_hours,data =data_pc1)
+summary(tobit_hours)
+
+
+# Fitted values
+xb=cbind(1,child ,ych0_2  ,ych3_4 ,  ych5_10  , ych11_16  ,age  , I(age^2) , educ_l , educ_h ,married , nwinc)%*%tobit_hours$estimate[1:12]
+sigma=exp(tobit_hours$estimate[13])
+predictions=(pnorm( (xb) / sigma))*xb+sigma*(dnorm( (xb) / sigma))
+hist(predictions)
+
+
+
+
+
+
+
