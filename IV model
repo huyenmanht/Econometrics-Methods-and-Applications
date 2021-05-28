@@ -1,0 +1,172 @@
+
+
+# PC2 Instrumental Variable Models
+
+
+# Set working directory
+setwd("/Users/manhhuyen/Documents/SA20 Unifr/Econometrics and Applications 1/PC labs/PC lab 2") 
+
+# Package installation
+#install.packages("....")
+
+# Update buil-in pacakges: 
+#update.packages(checkBuilt=TRUE)
+
+# Load add-on packages (Don�t forget to install them before!)
+library(foreign)
+library(lmtest)
+library(sandwich)
+library(AER)
+library(plyr) #to call ddply function
+library(corrplot) #for visualization of a correlation matrix
+
+# Load data set
+data_pc2=read.dta("pc_2.dta")
+
+#store variables in own objects
+attach(data_pc2)
+
+
+
+# 2.Descriptive analysis
+
+
+# Distribution of wage and educ. Does the data appear to be plausible?
+# Explore missing values
+sum(is.na(data_pc2)) #return the sum of missing observations in the dataset
+sum(is.na(educ))
+sum(is.na(wage))
+
+
+#1) Distribution of wage and educ
+summary(wage)
+hist_wage=hist(wage,col="grey",main="Wage")
+
+summary(educ)
+hist_educ=hist(educ,col="dimgray",main="Education")
+
+#2) Mean wage for each education level 
+aggregate(wage,list(education=educ),mean)#split data into subsets
+plot(aggregate(wage,list(education=educ),mean))
+
+# We can show a two-way scatter plot with a fitted line, in addition 
+plot(educ,wage,xlab="education",ylab="wage")
+reg1=lm(wage~educ)
+abline(reg1)
+#we plotted a regression line 
+
+
+
+# Estimation: homogeneous effects
+
+
+#3) Estimate the returns to education by OLS
+ols1=lm(lwage~educ)
+summary(ols1)
+#if we assume homoskedastic error terms
+coeftest(ols1)
+#the covariance btw u and educ might be different than 0, this can't be a causality relationship 
+#there fore we can use an iv 
+# fatheduc as an instrument(Z) for education
+#4) Discuss whether or not this instrument is plausibly valid
+
+#5) 	Look at the correlation of educ and fatheduc and obtain the first stage estimates. 
+#Attention! missing observations 
+sum(is.na(fatheduc)) #how many na we have: 685
+#Generate missing indicator
+ind=is.na(fatheduc)==1 #ind=1 if we have missing information in fatheduc
+#Correlation (doesn't work when there is NA)
+cor(educ[ind==0], fatheduc[ind==0]) #condition in the bracket: only for observation with no missing information
+# output = 0.4692668
+
+#first stage
+fs1=lm(educ~fatheduc)
+summary(fs1)
+#ss1=lm(lwage~fs1$fitted) #will not run because of missing obeservation fatheuc 
+
+# If we want to estimate 2SLS manually, we must account for missing observations in fatheduc
+ss1=lm(lwage[ind==0]~fs1$fitted) #the command would not work if we don't exclude observations with missing information 
+summary(ss1)
+
+#Attention: Standard errors are not correct! -> use the ivreg
+
+# Use iv command
+iv1=ivreg(lwage~educ|fatheduc)
+summary(iv1, vcov=vcovHC)
+
+#6) Is your explanation in (5) plausible if you think that omitted variable bias from unobserved ability only was the problem for OLS?
+
+#7) 	How could you increase the validity of the instrument with the available data?
+
+# Perform a new IV regression of lwage on educ (Z=fatheduc) including the controls 
+
+#8) Obtain again the first stage estimates 
+#perform a new IV regression: add control variable south + black + smsa
+#first stage: 
+fs2=lm(educ~fatheduc+south+black+smsa)
+summary(fs2)  
+
+#9) Use 2SLS to estimate the model and compare the coefficient on educ 
+iv2=ivreg(lwage~educ+south+black+smsa|fatheduc+south+black+smsa)
+summary(iv2, vcov=vcovHC)
+
+ols2=lm(lwage~educ+south+black+smsa)
+summary(ols2)
+coeftest(ols2, vcov=vcovHC)
+
+#10) why growing up near a college could be a good instrument for education conditional on smsa, black and south?
+
+#11)  Use nearc2 as instrument for educ 
+iv3=ivreg(lwage~educ+south+black+smsa|nearc2+south+black+smsa)
+summary(iv3, vcov=vcovHC)
+
+#check assumption 1
+cor(educ,nearc2)
+#check stage 1 strength of instrument
+fs3=lm(educ~nearc2+south+black+smsa)
+summary(fs3) 
+
+#12) Use nearc4 as instrument for education and repeat the 2SLS estimation and check the first stage
+fs4=lm(educ~nearc4+south+black+smsa)
+summary(fs4) 
+
+iv4=ivreg(lwage~educ+south+black+smsa|nearc4+south+black+smsa)
+summary(iv4, vcov=vcovHC)
+
+#13) If fatheduc and nearc4 would both be valid instruments, would your results from (12) and (8) be possible?
+
+
+
+# Heterogenous effects. Education= college education {0,1}
+
+
+#14) collfath as an instrument
+iv5=ivreg(lwage~college+south+black+smsa|collfath+south+black+smsa)
+summary(iv5, vcov=vcovHC)
+
+# nearc4 as an instrument
+iv6=ivreg(lwage~college+south+black+smsa|nearc4+south+black+smsa)
+summary(iv6, vcov=vcovHC)
+
+#15) Estimate the size of the complier population for each instrument (ignoring the covariates)
+olsA=lm(college~collfath)
+#mean difference when the instrument is turned on and off
+#1,1: dummy for collfath = 1, 1,0: dummy for collfath = 0 
+meanA1=mean(cbind(1,1)%*%olsA$coef)
+meanA2=mean(cbind(1,0)%*%olsA$coef)
+meanA1-meanA2 # = 0.39911
+
+#or:
+olsA=lm(college~collfath)
+
+summary(olsA)
+#coef = 0.39911
+
+#for nearc4
+olsB=lm(college~nearc4)
+meanB1=mean(cbind(1,1)%*%olsB$coef)
+meanB2=mean(cbind(1,0)%*%olsB$coef)
+meanB1-meanB2
+
+#or:
+summary(olsB)
