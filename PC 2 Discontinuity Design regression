@@ -1,0 +1,133 @@
+
+# PC3 Regression discontinuity design
+
+
+setwd("/Users/manhhuyen/Documents/SA20 Unifr/Econometrics and Applications 1/PC labs/PC lab 3") 
+library(foreign)
+data_pclab3=load("pc_3.RData")
+sum(is.na(data))
+#store variables in own objects
+attach(data)
+
+
+
+library(foreign)
+library(lmtest)
+library(sandwich)
+library(AER)
+
+
+
+
+
+# Descriptive analysis
+
+sum(is.na(data))
+
+sum(is.na(numvisits))
+summary(numvisits)
+hist_numvisits=hist(numvisits,col="grey",main="Number of visits")
+summary(mom_educ)
+hist_mom_educ=hist(mom_educ,col="blue",main="Mothers' years of education")
+summary(R)
+
+#hist(R,breaks=40)
+
+hist_R=hist(R,col="white",main="Days before and after the cut-off")
+aggregate(mom_educ,list(age_cut_off=R),mean)
+
+plot(aggregate(mom_educ,list(age_cut_off=R),mean))
+plot(aggregate(numvisits[ind==0],list(age_cut_off=R[ind==0]),mean))
+ind=is.na(numvisits)==1
+mothbornafter = R>-1
+aggregate(mothbornafter,list("days before or after cut-off"=R),mean)
+
+
+
+#3)
+#sum(is.na(mom_educ))
+#plot(aggregate(mom_educ,list(R=R),mean),ylab="mean_mom_educ",main="Mean educ.levels by R")
+
+
+#sum(is.na(numvisits))
+#plot(aggregate(numvisits,list(R=R),mean,na.rm=TRUE),ylab="mean_numvisits",main="Mean of doctor visits by R")
+
+
+
+
+# Estimation
+
+#4) R is the running variable (days before or after cut-off): R<=0 means before cut-off; R>0 means after cut-off
+# define the variable z as 1 if born prior to age cut-off (such that R<=0) and 0 if born after age cut-off (such that R>0) for entering school
+z=R<=0
+z
+
+
+
+
+#5) run RD estimation to estimate the effect of being born prior to age cut-off on mother's years of schooling by parametric RD
+# assume constant slope before and after discontinuity
+ols1=lm(mom_educ~z+R)
+summary(ols1)
+
+
+
+#6)assume different slope before and after discontinuity in RD design
+ols2=lm(mom_educ~z*R)
+summary(ols2)
+
+
+#7) run RD estimation with controls for ethnicity: black, white_nh (white non-Hispanic), white_h (white Hispanic) 
+sum(rbind(mean(black),mean(white_nh),mean(white_h)))
+ols3=lm(mom_educ~z*R+black+white_nh+white_h)
+summary(ols3)
+
+
+#8) run a more local RD estimation without controls (allowing for different slope before and after cut-off)
+localsample=(R>=-39 & R<=40)
+sum(localsample)  #gives sample size
+
+ols4=lm(mom_educ[localsample==1]~z[localsample==1]*R[localsample==1])
+summary(ols4)
+
+#9) plot mean outcomes of mom_educ given R (estimated by regressing outcomes on dummies defined by R) vs. running variable R in local sample  
+plot(y=lm(mom_educ[localsample==1]~factor(R[localsample==1]))$fitted, x=R[localsample==1])
+
+
+#==== Fuzzy RD==========
+
+#10) generate a treatment variable based on mom's education: high education=more than 9 years of education 
+# idea is to estimate the effect of mom's higher education on number of doctor visits prior to birth of child by using z as instrument in Fuzzy RD design 
+higheduc=mom_educ>9
+
+higheduc
+
+#We can show probability of treatment by forcing variable (shows where we have first stage)
+plot(aggregate(higheduc,list(R=R),mean),ylab="probability of high educ")
+
+#11) investigate first stage effect of instrument z on treatment 
+ols5=lm(higheduc~z+R)
+summary(ols5)
+
+#12) run fuzzy RD regression assuming constant slope in running variable
+iv1=ivreg(numvisits ~ higheduc+R | z+R)
+summary(iv1)
+
+#13) run fuzzy RD regression assuming different slope in running variable before and after discontinuity
+iv2=ivreg(numvisits ~ higheduc*R  | z*R)
+summary(iv2)
+
+#14) run fuzzy RD regression assuming different slope in running variable before and after discontinuity and include dummies for ethnicity
+iv3=ivreg(numvisits ~ higheduc*R +black+white_nh+white_h  | z*R +black+white_nh+white_h)
+summary(iv3)
+
+
+#15) investigate first stage effect of instrument z on treatment in local sample
+ols6=lm(higheduc[localsample==1] ~ z[localsample==1]+R[localsample==1])
+summary(ols6)
+
+#16) run fuzzy RD regression assuming different slope in running variable before and after discontinuity in local sample
+iv4=ivreg(numvisits[localsample==1] ~ higheduc[localsample==1]*R[localsample==1] | z[localsample==1]*R[localsample==1])
+summary(iv4)
+
+
